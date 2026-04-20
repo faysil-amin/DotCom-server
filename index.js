@@ -21,7 +21,14 @@ async function run() {
     const userCollection = assignment11Server.collection("userCollection");
     app.post("/user", async (req, res) => {
       const data = req.body;
+      const query = { email: req.email };
+      const email = req.email;
       data.user = "user";
+      data.createdAt = new Date();
+      const existUser = await userCollection.findOne({ email });
+      if (existUser) {
+        return res.send({ message: "user exist" });
+      }
       const result = await userCollection.insertOne(data);
       res.send(result);
     });
@@ -29,6 +36,12 @@ async function run() {
       const cursor = userCollection.find();
       const result = await cursor.toArray();
       res.send(result);
+    });
+    app.get("/user/:email/role", async (req, res) => {
+      const email = req.params.email;
+      const query = { userEmail: email };
+      const result = await userCollection.findOne(query);
+      res.send({ role: result?.role || "user" });
     });
     await client.db("admin").command({ ping: 1 });
     console.log(
