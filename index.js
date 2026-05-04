@@ -17,6 +17,9 @@ const client = new MongoClient(uri, {
 const admin = require("firebase-admin");
 
 const serviceAccount = require("./assignment-11-firebase-adminsdk.json");
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 const verifyToken = async (req, res, next) => {
   const tokenHeader = req.headers.authorization;
@@ -41,11 +44,24 @@ async function run() {
     const assignment11Server = client.db("assignment11Server");
     const userCollection = assignment11Server.collection("userCollection");
     const lessonCollection = assignment11Server.collection("lessonCollection");
+    const userReaction = assignment11Server.collection("userReaction");
+    const lessonSaveCollection = assignment11Server.collection(
+      "lessonSaveCollection",
+    );
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.check_email;
+      const query = { user_email: email };
+      const result = await userCollection.findOne(query);
+      if (!result || result.user_role !== "admin") {
+        return res.status(403).send({ message: "forbiden Exice" });
+      }
+      next();
+    };
     app.post("/user", async (req, res) => {
       const data = req.body;
       const query = { email: req.email };
       const email = req.email;
-      data.user = "user";
+      data.userRole = "user";
       data.createdAt = new Date();
       data.user = "not_premeum";
       const existUser = await userCollection.findOne({ email });
@@ -68,22 +84,77 @@ async function run() {
     });
     app.post("/addlesson", async (req, res) => {
       const data = req.body;
+      data.lesson_like = 0;
+      data.lesson_save = 0;
       data.createdAt = new Date();
       const result = await lessonCollection.insertOne(data);
-      res.send(result);
-    });
-    app.patch("/addlesson/:id", async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const updateDoc = {
-        $inc: { lesson_like: 1 },
-      };
-      const result = await lessonCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
     app.get("/addlesson", async (req, res) => {
       const data = lessonCollection.find().sort({ createdAt: -1 });
       const result = await data.toArray();
+      res.send(result);
+    });
+    app.get("/addlesson/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { user_email: email };
+      const result = await lessonCollection.find(query).toArray();
+      res.send(result);
+    });
+    app.patch("/addlesson/:id/like", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const { like_lesson } = req.body;
+      let incValue = 0;
+      if (like_lesson === "like") {
+        incValue = 1;
+      } else if (like_lesson === "dislike") {
+        incValue = -1;
+      }
+      const update = {
+        $inc: {
+          lesson_like: incValue,
+        },
+      };
+      const result = await lessonCollection.updateOne(query, update);
+      res.send(result);
+    });
+    app.post("/userReaction", async (req, res) => {
+      const data = req.body;
+      const { lessonId, user_email } = data;
+      const existId = await userReaction.findOne({ lessonId, user_email });
+      if (existId) {
+        return res.send({ message: "lesson exist" });
+      }
+      data.createdAt = new Date();
+      const result = await userReaction.insertOne(data);
+      res.send(result);
+    });
+    app.get("/userReaction/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { user_email: email };
+      const data = await userReaction.find(query).toArray();
+      res.send(data);
+    });
+    app.patch("/userReaction/:id/:email", async (req, res) => {
+      const { id, email } = req.params;
+      const { islike } = req.body;
+      const query = { lessonId: id, user_email: email };
+      const update = {
+        $set: { islike: islike },
+      };
+      const result = await userReaction.updateOne(query, update);
+      res.send(result);
+    });
+    app.post("/lessonSave", async (req, res) => {
+      const data = req.body;
+      const result = await lessonSaveCollection.insertOne(data);
+      res.send(result);
+    });
+    app.delete("/addlessons/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await lessonCollection.deleteOne(query);
       res.send(result);
     });
     await client.db("admin").command({ ping: 1 });
