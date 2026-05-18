@@ -38,6 +38,7 @@ const verifyToken = async (req, res, next) => {
     return res.status(401).send({ message: "unauthoriz access" });
   }
 };
+
 async function run() {
   try {
     await client.connect();
@@ -45,29 +46,31 @@ async function run() {
     const userCollection = assignment11Server.collection("userCollection");
     const lessonCollection = assignment11Server.collection("lessonCollection");
     const userReaction = assignment11Server.collection("userReaction");
+    const contactList = assignment11Server.collection("contactList");
     const lessonSaveCollection = assignment11Server.collection(
       "lessonSaveCollection",
     );
+    const newsLettersCollection = assignment11Server.collection("newsLetters");
+    const commentCollection = assignment11Server.collection("comment");
     const verifyAdmin = async (req, res, next) => {
       const email = req.check_email;
-      const query = { user_email: email };
+      const query = { userEmail: email };
       const result = await userCollection.findOne(query);
-      if (!result || result.user_role !== "admin") {
+      if (!result || result.userRole !== "admin") {
         return res.status(403).send({ message: "forbiden Exice" });
       }
       next();
     };
     app.post("/user", async (req, res) => {
       const data = req.body;
-      const query = { email: req.email };
-      const email = req.email;
-      data.userRole = "user";
-      data.createdAt = new Date();
-      data.user = "not_premeum";
-      const existUser = await userCollection.findOne({ email });
+      const { userEmail } = data;
+      const existUser = await userCollection.findOne({ userEmail });
       if (existUser) {
         return res.send({ message: "user exist" });
       }
+      data.userRole = "user";
+      data.createdAt = new Date();
+      data.user = "not_premium";
       const result = await userCollection.insertOne(data);
       res.send(result);
     });
@@ -80,17 +83,69 @@ async function run() {
       const email = req.params.email;
       const query = { userEmail: email };
       const result = await userCollection.findOne(query);
-      res.send({ role: result?.role || "user" });
+      res.send({ role: result?.userRole || "user" });
+    });
+    app.get("/user/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { userEmail: email };
+      const result = await userCollection.findOne(query);
+      res.send(result);
     });
     app.post("/addlesson", async (req, res) => {
       const data = req.body;
       data.lesson_like = 0;
       data.lesson_save = 0;
+      data.admin_select = "not select";
       data.createdAt = new Date();
       const result = await lessonCollection.insertOne(data);
       res.send(result);
     });
+    app.patch(
+      "/addlesson/:id/adminSelect",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const { selectLesson } = req.body;
+        if (selectLesson === "select") {
+          const selectedCount = await lessonCollection.countDocuments({
+            admin_select: "select",
+          });
+          if (selectedCount >= 6) {
+            return res.status(400).send({
+              message: "You can only select 6 lessons for home",
+            });
+          }
+        }
+        let lessonSelect = "";
+        if (selectLesson === "select") {
+          lessonSelect = "select";
+        } else if (selectLesson === "not select") {
+          lessonSelect = "not select";
+        }
+        const update = {
+          $set: {
+            admin_select: lessonSelect,
+          },
+        };
+        const result = await lessonCollection.updateOne(query, update);
+        res.send(result);
+      },
+    );
     app.get("/addlesson", async (req, res) => {
+      const { skip, limit } = req.query;
+      const pageSkip = skip * limit;
+      const data = lessonCollection
+        .find()
+        .sort({ createdAt: -1 })
+        .skip(Number(pageSkip))
+        .limit(Number(limit));
+      const result = await data.toArray();
+      const countLesson = await lessonCollection.countDocuments();
+      res.send({ result, total: countLesson });
+    });
+    app.get("/homeAddlesson", async (req, res) => {
       const data = lessonCollection.find().sort({ createdAt: -1 });
       const result = await data.toArray();
       res.send(result);
@@ -146,16 +201,66 @@ async function run() {
       const result = await userReaction.updateOne(query, update);
       res.send(result);
     });
-    app.post("/lessonSave", async (req, res) => {
-      const data = req.body;
-      const result = await lessonSaveCollection.insertOne(data);
-      res.send(result);
-    });
     app.delete("/addlessons/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await lessonCollection.deleteOne(query);
       res.send(result);
+    });
+    app.post("/lessonSave", async (req, res) => {
+      const data = req.body;
+      const { user_email, lessonId } = data;
+      const existLesson = await lessonSaveCollection.findOne({
+        user_email,
+        lessonId,
+      });
+      if (existLesson) {
+        return res.send({ message: "lesson already saved" });
+      }
+      const result = await lessonSaveCollection.insertOne(data);
+      res.send(result);
+    });
+    app.get("/lessonSave/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { user_email: email };
+      const result = await lessonSaveCollection.find(query).toArray();
+      res.send(result);
+    });
+    app.get("/addlessontohome", async (req, res) => {
+      const cursor = lessonCollection.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+    app.post("/contact", verifyToken, async (req, res) => {
+      const data = req.body;
+      data.createdAt = new Date();
+      const result = await contactList.insertOne(data);
+      res.send(result);
+    });
+    app.get("/contact", async (req, res) => {
+      const result = await contactList.find().sort({ createdAt: -1 }).toArray();
+      res.send(result);
+    });
+    app.post("/newsLetters", async (req, res) => {
+      const data = req.body;
+      data.createdAt = new Date();
+      const result = await newsLettersCollection.insertOne(data);
+      res.send(result);
+    });
+    app.get("/newsLetters", async (req, res) => {
+      const result = await newsLettersCollection.find().toArray();
+      res.send(result);
+    });
+    app.delete("/newsLetters/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await newsLettersCollection.deleteOne(query);
+      res.send(result);
+    });
+    app.post("/comment", async (req, res) => {
+      const data = req.body;
+      const result = await commentCollection.insertOne(data);
+      res.send();
     });
     await client.db("admin").command({ ping: 1 });
     console.log(
