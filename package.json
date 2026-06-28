@@ -9,10 +9,11 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@tanstack/react-query": "^5.101.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "firebase-admin": "^13.8.0",
-    "mongodb": "^7.1.1"
+    "firebase-admin": "^13.0.2",
+    "mongodb": "^6.21.0"
   }
 }

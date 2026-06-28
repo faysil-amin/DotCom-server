@@ -5,8 +5,10 @@ const app = express();
 const port = process.env.PORT || 3000;
 app.use(express.json());
 app.use(cors());
+const dns = require("node:dns/promises");
+dns.setServers(["1.1.1.1", "8.8.8.8"]);
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const uri = `mongodb+srv://${process.env.DB_NAME}:${process.env.SECRET_KEY}@cluster0.rgj7zze.mongodb.net/?appName=Cluster0`;
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.rgj7zze.mongodb.net/?appName=Cluster0`;
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -16,9 +18,10 @@ const client = new MongoClient(uri, {
 });
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./assignment-11-firebase-adminsdk.json");
+const serviceAccount = require("./assignment-11-a032d-firebase-adminsdk-fbsvc-13f9cecf42.json");
+
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+  credential: admin.credential.cert(serviceAccount)
 });
 
 const verifyToken = async (req, res, next) => {
@@ -31,7 +34,7 @@ const verifyToken = async (req, res, next) => {
     return res.status(401).send({ message: "token not found" });
   }
   try {
-    const check = await admin.auth().verifyIdToken(tokenOnly);
+    const check = await getAuth().verifyIdToken(tokenOnly);
     req.check_email = check.email;
     next();
   } catch (error) {
