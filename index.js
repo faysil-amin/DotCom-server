@@ -7,6 +7,7 @@ app.use(express.json());
 app.use(cors());
 const dns = require("node:dns/promises");
 dns.setServers(["1.1.1.1", "8.8.8.8"]);
+const stripe = require('stripe')(process.env.STRIPS_KEY);
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.rgj7zze.mongodb.net/?appName=Cluster0`;
 const client = new MongoClient(uri, {
@@ -265,6 +266,41 @@ async function run() {
       const result = await commentCollection.insertOne(data);
       res.send();
     });
+    app.post('/create-checkout-session', async (req, res) => {
+      const { user_email } = req.body;
+      const session = await stripe.checkout.sessions.create({
+        line_items: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: 'Premium Membership',
+              },
+              unit_amount: 1000, // Amount in cents (e.g., $10.00)
+            },
+            quantity: 1,
+          },
+        ],
+        customer_email: user_email,
+        mode: 'payment',
+        success_url: `${process.env.YOUR_DOMAIN}/successFullPayment?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.YOUR_DOMAIN}/paymentCancle`,
+      });
+
+      res.send({ url: session.url });
+    });
+    app.patch("/paymentSuccess", async (req, res) => {
+      const url = req.query.session_id;
+      const session = await stripe.checkout.sessions.retrieve(url);
+      const query = { userEmail: session.customer_email };
+      const update = {
+        $set: {
+          user: 'premium'
+        }
+      }
+      const result = await userCollection.updateOne(query, update)
+      res.send({ success: true })
+    })
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
