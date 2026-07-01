@@ -301,6 +301,30 @@ async function run() {
       const result = await userCollection.updateOne(query, update)
       res.send({ success: true })
     })
+    app.get("/toptwopost", async (req, res) => {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const result = await lessonCollection.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: sevenDaysAgo,
+            },
+          },
+        },
+        {
+          $sort: {
+            lesson_like: -1,
+          },
+        },
+        {
+          $limit: 2,
+        },
+      ]).toArray();
+
+      res.send(result);
+    });
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
